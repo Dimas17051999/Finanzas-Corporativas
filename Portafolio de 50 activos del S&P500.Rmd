@@ -1,0 +1,97 @@
+---
+title: "PORTAFOLIO DE 50 ACTIVOS DEL S&P500"
+author: "DIMAS RAMIREZ LUIS DANIEL, GONZALEZ CABRERA RODOLFO"
+date: "POR DEFINIR"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Entrega 2
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE, message= FALSE, warning = FALSE, fig.align = "center")
+                      #fig.height =  , fig.width = )
+library(quantmod)
+library(quadprog)
+library(PerformanceAnalytics)
+library(ggplot2)
+library(tidyr)
+library(knitr)
+library(xts)
+```
+
+## 1.-Importar datos 
+
+Exportamos los tickers de las empresas 400-450 del S&P500
+
+ - La empresa con ticker FOXA comenzo a cotizar hasta el 11-Marzo-2019, y nuestro análisis comienza en el 2016 por lo tanto lo descartamos para nuestros trabajo. 
+
+
+## 2.-Filtrar precios mensuales de cierre de los últimos 5 años de cada activo 
+
+La exportación de datos se realizó el 08-Julio-2021.
+De las 50 empresas, hay 4 que no se pudieron descargar sus datos además de FOXA que la eliminamos porque empezo a cotizar hata casi 3 años después. 
+
+```{r}
+Rendimientos_mensuales <- read.csv("F:/Finanzas Corporativas/Rendimientos mensuales SP500.csv")
+
+knitr::kable(names(Rendimientos_mensuales[-c(1,2)]), format = "pipe", col.names = "TICKER", align = "c", caption = "Esta tabla incluye las empresas del S&P500 que nos tocaron")
+
+```
+
+
+## 3.- Graficar de los precios
+
+```{r}
+View(Rendimientos_mensuales)
+
+
+Rendimientos_mensuales <- xts(Rendimientos_mensuales, order.by = as.Date(Rendimientos_mensuales$Index))
+Rendimientos_mensuales <- Rendimientos_mensuales[, -c(1:2)]
+View(Rendimientos_mensuales)
+
+Precio_mensual <- fortify(Rendimientos_mensuales)
+Precio_mensual_tidy <- gather(Precio_mensual, key= Activos, value= Precios,  -Index)
+Precio_mensual_tidy$Precios <- as.numeric(Precio_mensual_tidy$Precios)
+View(Precio_mensual_tidy)
+#uNA GRÁFICA QUE CONTENGA 23 Y OTRA LOS DEMÁS
+
+ggplot(Precio_mensual_tidy, aes(x= Index, y= Precios, col=Activos))+
+    geom_line()+
+   facet_wrap(~Activos)+
+   theme(legend.position = 'none')
+
+```
+
+## 4.-Calcular los rendimientos mensuales 
+
+```{r}
+View(Rendimientos_mensuales)
+str(Rendimientos_mensuales)
+
+#rendimientoM <- Return.calculate(Rendimientos_mensuales)
+#rendimientoM <- rendimientoM[-1,]
+#head(rendimientoM$CNP)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,237 @@
+---
+title: "Porta N"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.align = "center")
+library(quantmod) #Para los datos
+library(quadprog) #Para la optimización
+library(PerformanceAnalytics)
+library(knitr) #Para las tablas
+library(ggplot2) #Pra gráficas
+#library(tidyverse)
+
+```
+
+# Importar Datos
+
+```{r}
+
+tick<-c("MEGACPO.MX", "FEMSAUBD.MX", "IENOVA.MX", "GMEXICOB.MX","AMXL.MX", "BIMBOA.MX")#, "GCC.MX","GENTERA.MX", "ALPEKA.MX", "ALSEA.MX") #Nombres de los tickers de yahoo finance
+
+amb<-new.env() #Especio en computadora
+
+getSymbols(tick, env = amb) #Importa los datos y los gurada en un objeto con formato list. Es una función de quantmode
+
+clp<-lapply(amb, Cl) #Selecciona las columnas deseadas Cl es una función de quantmode existen Vo, Hi, Lo, Op.
+
+clpf<-do.call(merge, clp) #Coloca los activos selecciondos en una base.
+View(clpf)
+```
+
+# Ventana de tiempo de tres años
+
+```{r}
+
+clp3<-clpf["2018-06-29/2021-06-29"]
+View(clp3)
+
+##################################################
+  nombres<-colnames(clp3)
+
+nombresf<-unlist(strsplit(nombres, "[.]"))[c(TRUE, FALSE, FALSE)]
+###################################################
+
+pm<-clp3[endpoints(clp3,'months')] #precios mensuales
+
+View(pm)
+
+##################################################
+names(pm)<-nombresf
+##################################################
+
+pm_fechas<-fortify(pm)
+
+View(pm_fechas)
+
+pm_tidy<-gather(pm_fechas, key = Activos, value = Precios, -Index)
+
+View(pm_tidy)
+
+ggplot(pm_tidy, aes (x=Index, y=Precios, col=Activos))+
+  geom_line()
+```
+
+# Cálculo de Rendimientos Mensuales
+
+```{r}
+View(pm)
+str(pm)
+rm<-Return.calculate(pm)
+View(rm)
+rm<-rm[-1,]
+rm_fechas<-fortify(rm)
+View(rm_fechas)
+
+rm_tidy<-gather(rm_fechas, key=Activos, value = Rendimientos, -Index)
+
+View(rm_tidy)
+
+ggplot(rm_tidy, aes(x=Index, y=Rendimientos, col=Activos))+
+  geom_line()+
+  facet_wrap(.~Activos)
+
+
+```
+
+# Matriz de Varianzas-Covarianzas y Vector de Rendimientos
+
+```{r}
+
+VCOV<-cov(rm)
+View(VCOV)
+Mcor<-cor(rm)
+View(Mcor)
+
+avg.ret<-apply(rm, 2, mean) #mu
+
+increments<-100
+
+wgt<-matrix(0,nrow=increments,ncol=length(avg.ret))
+
+colnames(wgt)<-colnames(rm) # Espacio para guradar proporciones de wi de cada uno de los 100 portafolios
+View(wgt)
+tgt.sd<-rep(0, length=increments) # Esacio para gurdar las volatilidades de cada uno de los 100 portafolios
+
+
+```
+
+
+```{r}
+
+min.ret<-min(avg.ret) #Valor mínimo de rentabilidad
+
+max.ret<-max(avg.ret) #valor máximo de rentabilidad
+
+tgt.ret<-seq(min.ret,max.ret,length=increments)
+
+
+```
+
+# Optimizador
+
+```{r}
+
+for (i in 1:increments){
+Dmat<-2*VCOV
+  dvec<-c(rep(0,length(avg.ret)))
+    Amat<-cbind(rep(1,length(avg.ret)),avg.ret,
+  diag(1,nrow=ncol(rm)))
+bvec<-c(1,tgt.ret[i],rep(0,ncol(rm)))
+soln<-solve.QP(Dmat,dvec,Amat,bvec=bvec,meq=2)
+tgt.sd[i]<-sqrt(soln$value)
+wgt[i,]<-soln$solution
+}
+
+for (i in 1:10){
+wgt[,i]<-ifelse(abs(wgt[,i])<=0.0000001,0,wgt[,i])
+}
+
+apply(wgt, 1, sum)
+
+tgt.port<-data.frame(cbind(wgt, tgt.ret, tgt.sd))
+View(tgt.port)
+
+#plot(tgt.port$tgt.ret~tgt.port$tgt.sd)
+
+ggplot(tgt.port, aes(x = tgt.sd, y=tgt.ret))+
+  geom_point(col="Green")
+
+```
+
+#Frontera eficiente
+
+
+```{r}
+
+pmv<-subset(tgt.port, tgt.sd==min(tgt.sd))
+
+FE<-subset(tgt.port, tgt.ret>=pmv$tgt.ret)
+
+plot(FE$tgt.ret~FE$tgt.sd)
+
+
+View(FE)
+ggplot(FE, aes(x=tgt.sd, y=tgt.ret))+
+  geom_point(col="Green")
+
+
+```
+
+#Razón de sharpe
+
+```{r}
+
+rf<-4.03
+
+rfd<-(1+rf/100)^(1/12)-1 #Rendimineto mensual de CETES
+
+FE$Sharpe<-(FE$tgt.ret-rfd)/FE$tgt.sd
+
+Sharpe_max<-subset(FE, Sharpe==max(Sharpe))
+
+#plot(FE$tgt.ret~FE$tgt.sd, type="l", xlim=c(0, .09), ylim=c(0,.025), col="Blue", xlab="Volatilidad", ylab="Rendimiento", main="Riesgo Vs. Rendimiento")#·segments(x0=0, y0=rfd, x1=Sharpe_max$tgt.sd, y1=Sharpe_max$tgt.ret, col="Green")
+#abline(v=0, col="Red")
+#abline(h=0, col="Red")
+
+ggplot(FE, aes(x=tgt.sd, y=tgt.ret))+
+  geom_point(col="Green")+
+  geom_segment(x=0, y=rfd, xend=Sharpe_max$tgt.sd, yend=Sharpe_max$tgt.ret, col="Blue")
+
+```
+
+# Combinación del activo con máxima razón de Sharpe y la rf para un riesgo de 0.04 y 0.12.
+
+```{r}
+
+ERp_0.04<-rfd+Sharpe_max$Sharpe*.04
+
+w_np<-(ERp_0.04-rfd)/(Sharpe_max$tgt.ret-rfd)
+
+pms<-round(Sharpe_max[,1:10]*w_np*100,2)
+
+ERP_0.04a<-round(((ERp_0.04+1)^12-1)*100,2)
+Vol_0.04a<-round(0.04*12^.5*100,2)
+
+ERP_0.04a/Vol_0.04a
+
+```
+
+Por lo tanto se debe invertir en la rf `r round((1-w_np)*100,2)` % y `r kable(pms)`
+
+
+```{r}
+
+ERp_0.12<-rfd+Sharpe_max$Sharpe*0.12
+
+w_np<-(ERp_0.12-rfd)/(Sharpe_max$tgt.ret-rfd)
+
+pms<-round(Sharpe_max[,1:10]*w_np*100,2)
+
+ERP_0.12a<-round(((ERp_0.12+1)^12-1)*100,2)
+Vol_0.12a<-round(0.12*12^.5*100,2)
+
+ERP_0.12a/Vol_0.12a
+
+```
+
+Por lo tanto se debe pedir prestado a la rf `r round((1-w_np)*100,2)` % y `r kable(pms)`
+
+
+
+
+
+
+

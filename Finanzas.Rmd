@@ -1,0 +1,161 @@
+---
+title: "Finanzas Rendimientos, Portafolio, Frontera eficiente"
+author: "DIMAS RAMIREZ LUIS DANIEL"
+date: "19/6/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(quantmod) #Librería Financiera
+```
+
+# Dos activos (CEMEX y BIMBO)
+
+## Importar datos
+
+```{r}
+
+tickers<-c("BIMBOA.MX", "CEMEXCPO.MX") #Poner nombres de Tickers
+
+getSymbols(tickers)
+
+names(BIMBOA.MX)
+names(CEMEXCPO.MX)
+
+plot(BIMBOA.MX$BIMBOA.MX.Close, col="BLUE")
+plot(CEMEXCPO.MX$CEMEXCPO.MX.Close, col="GREEN")
+
+```
+
+## Cálculo de Rendimientos
+
+```{r}
+
+#View(CEMEXCPO.MX)
+R_B<-diff(BIMBOA.MX$BIMBOA.MX.Close)/BIMBOA.MX$BIMBOA.MX.Close["2007-01-02/2021-06-10"]
+plot(R_B, col="BLUE") 
+
+R_C<-diff(CEMEXCPO.MX$CEMEXCPO.MX.Close)/CEMEXCPO.MX$CEMEXCPO.MX.Close["2007-01-02/2021-06-10"]
+plot(R_C, col="Green")
+
+```
+
+## Considerar una ventana de tres años
+
+```{r}
+
+#View(R_C3)
+R_B3<-R_B["2018-06-10/2021-06-10"]
+R_C3<-R_C["2018-06-10/2021-06-10"]
+
+
+```
+
+## Valor esperado
+
+```{r}
+
+ER_B<-mean(R_B3)
+ER_C<-mean(R_C3)
+
+```
+
+## Varianzas y covarianzas
+
+```{r}
+
+VR_B<-var(R_B3)
+VR_C<-var(R_C3)
+CR_BC<-cov(R_B3, R_C3)
+
+```
+
+## Valor esperado del portafolio con w=0.5.
+
+$$E[R_p]=wE[R_B]+(1-w)E[R_C]$$
+
+```{r}
+
+w<-0.5
+
+ER_p<-w*ER_B+(1-w)*ER_C
+
+```
+
+## Cálculo de la varianza del portafolio y de su riesgo (Volatilidad=desviación estándar)
+
+$\sigma^2_p=w^2\sigma^2_B+(1-w)\sigma^2_C+2w(1-w)\sigma_{BC}$
+
+$\sigma_p=\sqrt{\sigma^2_p}$
+
+```{r}
+
+VR_p<-w^2*VR_B+(1-w)^2*VR_C+2*w*(1-w)*CR_BC
+Vola_p<-VR_p^.5
+
+```
+
+
+## Cálculo del portafolio de mínima varianza.
+
+$$w=\frac{\sigma^2_j-\sigma_{ij}}{\sigma^2_i+\sigma^2_j-2\sigma_{ij}}$$
+
+
+```{r}
+
+w_mv<-(VR_C-CR_BC)/(VR_B+VR_C-2*CR_BC)
+as.numeric(w_mv)
+
+ERP_mv<-w_mv*ER_B+(1-w_mv)*ER_C
+
+VR_pmv<-w_mv^2*VR_B+(1-w_mv)^2*VR_C+2*w_mv*(1-w_mv)*CR_BC
+Vola_pmv<-VR_pmv^.5
+
+
+```
+
+
+## Valor esperado del portafolio con w entre cero y uno.
+
+```{r}
+
+w<-seq(0,1, by=.0001)
+
+ER_p<-w*ER_B+(1-w)*ER_C
+
+```
+
+## Cálculo de la varianza del portafolio y de su riesgo (Volatilidad=desviación estándar)
+
+```{r}
+
+VR_p<-w^2*VR_B+(1-w)^2*VR_C+2*w*(1-w)*CR_BC
+Vola_p<-VR_p^.5
+
+plot(Vola_p, ER_p, type="l")
+abline(h=ERP_mv, col="Red")
+abline(v=Vola_pmv, col="Red")
+
+```
+
+
+## Frontera Eficiente
+
+```{r}
+
+Por_B<-w*100
+Por_C<-(1-w)*100
+
+
+Frontera<-data.frame(cbind(Por_B,Por_C,ER_p,Vola_p))
+
+View(Frontera)
+
+Frontera_Ef<-subset(Frontera, ER_p>=as.numeric(ERP_mv))
+View(Frontera_Ef)
+
+plot(Frontera_Ef$Vola_p,Frontera_Ef$ER_p, type="l")
+
+```
